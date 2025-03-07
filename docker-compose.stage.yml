@@ -1,0 +1,24 @@
+version:  '3.7'
+
+networks:
+  demo:
+    external: true
+
+services:
+    converter_app:
+        build:
+            context: ./
+        expose:
+                - "5000"
+        networks:
+            - demo
+
+    converter_nginx:
+        image: nginx:latest
+        volumes:
+            - ./nginx.conf:/etc/nginx/nginx.conf:ro
+            - ./:/var/www
+        expose:
+            - "80"
+        networks:
+            - demo
