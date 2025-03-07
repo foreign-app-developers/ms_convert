@@ -24,7 +24,8 @@ FRAGMENTS_FOLDER = "./fragments"
 app.config['upload_folder'] = UPLOAD_FOLDER
 app.config['SWAGGER'] = {
     'title': 'PDF/PNG/JPG to Json API',
-    'specs_route': '/doc'  # документация будет доступна по маршруту /doc
+    'specs_route': '/doc',  # документация будет доступна по маршруту /doc
+    'static_url_path': '/flasgger_static'
 }
 swagger = Swagger(app)
 
