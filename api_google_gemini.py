@@ -24,7 +24,8 @@ FRAGMENTS_FOLDER = "./fragments"
 app.config['upload_folder'] = UPLOAD_FOLDER
 app.config['SWAGGER'] = {
     'title': 'PDF/PNG/JPG to Json API',
-    'specs_route': '/doc'  # документация будет доступна по маршруту /doc
+    'specs_route': '/converter/doc',  # документация будет доступна по маршруту /doc
+    'static_url_path': '/flasgger_static'
 }
 swagger = Swagger(app)
 
@@ -130,14 +131,15 @@ def extract_images_from_pdf(pdf_path):
 def check_worker():
     return f"Container ID: {socket.gethostname()}"
 
-@app.route("/process_png", methods=["POST"])
+@app.route("/converter/process_png", methods=["POST"])
 def process_png():
     """
+    Метод принимает изображение с одним заданием или с целой страницей из учебника. Протестировано на учебнике:https://online.flipbuilder.com/chfvo/puhv/
     ---
     parameters:
        - name: "file"
          in: "formData"
-         description: "PNG file to be processed"
+         description: "PNG or JPG file to be processed"
          required: true
          type: "file"
     responses:
@@ -165,8 +167,10 @@ def process_png():
     png_file = request.files['file']
     png_name = png_file.filename
     file_extension = os.path.splitext(png_name)[1].lower()
-    if file_extension != "png" or "jpg":
-        return jsonify({"error" : "Wrong file format"}),400
+
+    # Check for valid file format (png or jpg)
+    if file_extension not in [".png", ".jpg"]:
+        return jsonify({"error": "Wrong file format"}), 400
     png_path = os.path.join(UPLOAD_FOLDER, png_name)
     png_file.save(png_path)
     dictionaries = []
