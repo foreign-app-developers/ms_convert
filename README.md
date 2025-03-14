@@ -10,6 +10,6 @@ docker-compose -f docker-compose.stage.yml up -d
 
 ```
 **Endpoint для документации при локальном запуске:**
-[http://localhost/converter/doc](http://localhost/converter/doc)\n
+[http://localhost/converter/doc](http://localhost/converter/doc)  
 **Endpoint для документации при запуске на сервере:**
 [http://flexlearn.ru/converter/doc](http://flexlearn.ru/converter/doc)
