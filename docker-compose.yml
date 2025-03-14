@@ -4,6 +4,8 @@ services:
     converter_app:
         build:
             context: ./
+        volumes:
+                - ./:/app
         expose:
                 - "5000"
 
