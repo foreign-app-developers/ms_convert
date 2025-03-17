@@ -1,0 +1,22 @@
+version: "3"
+
+services:
+    consumer:
+        build:
+            context: .
+            dockerfile: Dockerfile.consumer
+        container_name: rate_limit_consumer
+        volumes:
+                - ./:/app
+        depends_on:
+            - redis_timer
+        command: python consumer.py
+
+    redis_timer:
+        container_name: redis_timer
+        image: redis:latest
+        ports:
+            - "6379:6379"
+        volumes:
+            - ./redis-data:/data
+        restart: always

@@ -10,3 +10,4 @@ class Config:
     UPLOAD_FOLDER = "./uploads"
     IMAGES_FOLDER = "./images"
     FRAGMENTS_FOLDER = "./fragments"
+    RABBITMQ = "amqp://admin:admin@xn--h1adbcol.xn----gtbbcb4bjf2ak.xn--p1ai:5672/%2f"

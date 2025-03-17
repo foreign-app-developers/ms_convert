@@ -1,19 +1,37 @@
+import pika
+import time
+import redis
+import logging
 import os
 import json
-import time
 import requests
-import base64
 
-def fragment_to_json(image_path):
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(level=logging.INFO)  # уровень логирования инфо
+
+# Подключение к Redis
+redis_client = redis.Redis(host='redis_timer', port=6379, db=0)
+
+# Подключение к RabbitMQ
+connection_params = pika.URLParameters(f"amqp://admin:admin@xn--h1adbcol.xn----gtbbcb4bjf2ak.xn--p1ai:5672/%2f")
+connection = pika.BlockingConnection(connection_params)
+channel = connection.channel()
+
+# Ограничение: обрабатываем по 1 запросу за раз
+channel.basic_qos(prefetch_count=1)
+channel.queue_declare(queue='rate_limit_queue', durable=True)
+
+RATE_LIMIT = 15  # Максимум 15 запросов в минуту
+WINDOW_SIZE = 60  # Окно в секундах
+
+def request(base64_image):
     # API ключ для авторизации
     api_key = "AIzaSyAZlQp7T_qLyiAiWKJd37CcDubMx_AycvY"
 
     # URL для запроса
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
 
-    # Читаем и кодируем изображение в Base64
-    with open(image_path, "rb") as image_file:
-        base64_image = base64.b64encode(image_file.read()).decode("utf-8")
     text = """
                     Ты – система, которая извлекает информацию из задания по английскому языку и преобразует её в строго структурированные данные в формате JSON. На вход подаётся изображение задания, содержащее текст с пропусками для заполнения. Твоя задача:
     1. Извлечь инструкцию (если она есть).
@@ -59,36 +77,73 @@ def fragment_to_json(image_path):
     headers = {
         'Content-Type': 'application/json'
     }
+    
+    try:
+        proxy_url = "http://45.186.6.104:3128"
+        os.environ['http_proxy'] = proxy_url
+        os.environ['HTTP_PROXY'] = proxy_url
+        os.environ['https_proxy'] = proxy_url
+        os.environ['HTTPS_PROXY'] = proxy_url
+        # Отправляем POST запрос
+        response = requests.post(url, headers=headers, data=json.dumps(data))
+        logger.info(response)
+        os.environ['http_proxy'] = ""
+        os.environ['HTTP_PROXY'] = ""
+        os.environ['https_proxy'] = ""
+        os.environ['HTTPS_PROXY'] = ""
+        # Загрузка строки в JSON-формат
+        data = json.loads(response.text)
 
-    for attempt in range(2):
-        try:
-            proxy_url = "http://45.186.6.104:3128"
-            os.environ['http_proxy'] = proxy_url
-            os.environ['HTTP_PROXY'] = proxy_url
-            os.environ['https_proxy'] = proxy_url
-            os.environ['HTTPS_PROXY'] = proxy_url
-            # Отправляем POST запрос
-            response = requests.post(url, headers=headers, data=json.dumps(data))
-            os.environ['http_proxy'] = ""
-            os.environ['HTTP_PROXY'] = ""
-            os.environ['https_proxy'] = ""
-            os.environ['HTTPS_PROXY'] = ""
-            time.sleep(1)
-            # Загрузка строки в JSON-формат
-            data = json.loads(response.text)
+        # Извлечение текста JSON из строки, которая находится в 'text' объекта 'parts'
+        json_text = data['candidates'][0]['content']['parts'][0]['text']
 
-            # Извлечение текста JSON из строки, которая находится в 'text' объекта 'parts'
-            json_text = data['candidates'][0]['content']['parts'][0]['text']
+        # Преобразуем строку в настоящий JSON
+        json_data = json.loads(json_text.strip('```json\n').strip())
 
-            # Преобразуем строку в настоящий JSON
-            json_data = json.loads(json_text.strip('```json\n').strip())
+        return json_data
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Ошибка при запросе{e}")
+    except Exception as e:
+        logger.error(f"Непредвиденная ошибка{e}")
 
-            return json_data
-        except requests.exceptions.RequestException as e:
-            print(f"Ошибка при запросе (попытка {attempt + 1}/{2}): {e}")
-        except Exception as e:
-            print("Непредвиденная ошибка")
+def get_wait_time():
+    """Вычисляет, сколько ждать, если лимит превышен"""
+    current_time = time.time()
+    request_times = redis_client.lrange("request_times", 0, -1)
 
-        # Если все попытки не удались
-    print("Не удалось получить данные после нескольких попыток.")
-    return None
+    if len(request_times) < RATE_LIMIT:
+        return 0  # Можно отправлять сразу
+
+    # Если лимит превышен — ждём до сброса самого старого запроса
+    first_request_time = float(request_times[0])
+    wait_time = (first_request_time + WINDOW_SIZE) - current_time
+    return max(0, wait_time)
+
+def log_request_time():
+    """Логирует время запроса в Redis"""
+    redis_client.rpush("request_times", time.time())
+    redis_client.ltrim("request_times", -RATE_LIMIT, -1)  # Оставляем только последние 15
+
+def callback(ch, method, properties, body):
+    """Обработчик запросов (с Rate Limiting через Redis)"""
+    request_data = body.decode()
+
+    wait_time = get_wait_time()
+    if wait_time > 0:
+        logger.info(f"Rate limit exceeded! Sleeping for {wait_time:.2f} seconds")
+        time.sleep(wait_time)
+
+    # Отправка запроса на API
+    response = request(request_data)
+    logger.info(response)
+    
+    # Логируем запрос в Redis
+    log_request_time()
+
+    # Подтверждение обработки
+    ch.basic_ack(delivery_tag=method.delivery_tag)
+
+channel.basic_consume(queue='rate_limit_queue', on_message_callback=callback)
+
+logger.info("Queue is ready for messages...")
+channel.start_consuming()
