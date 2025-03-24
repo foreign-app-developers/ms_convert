@@ -24,7 +24,7 @@ def process_image(image_path):
         filtered_boxes = []
         for box in result.boxes:
             conf = box.conf[0].item()  # Уверенность объекта
-            if conf > 0.7:  # Если уверенность больше 0.7
+            if conf > 0.5:  # Если уверенность больше 0.7
                 filtered_boxes.append(box)
 
         # Добавляем отфильтрованные объекты в новый результат
