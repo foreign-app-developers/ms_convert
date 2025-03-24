@@ -67,10 +67,10 @@ def process_png():
             tmp_dict = fragment_to_json(image_fragment)
             if tmp_dict:
                 dictionaries.append(tmp_dict)
+        for image_fragment in image_fragments: # удаляем фрагменты
+            os.remove(image_fragment)
+    else: return jsonify({"error": "No tasks found"}), 400
 
-    # удаляем фрагменты
-    for image_fragment in image_fragments:
-        os.remove(image_fragment)
 
     return jsonify({"message": "success", "tasks": dictionaries})
 
