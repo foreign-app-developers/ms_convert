@@ -1,4 +1,5 @@
 from flask import request, jsonify, Blueprint, current_app
+from flask_cors import cross_origin
 from ..utils.image_processing import process_image
 from ..utils.pdf_processing import extract_images_from_pdf
 from ..utils.request_limit import increment_requests_count, TooManyRequestsError
@@ -13,6 +14,7 @@ def check_worker():
     return f"Container ID: {socket.gethostname()}"
 
 @bp_converter.route("/process_png", methods=["POST"])
+@cross_origin(origins=["http://localhost:5173", "http://localhost:5173"])
 def process_png():
     """
     Метод принимает изображение с одним заданием или с целой страницей из учебника. Протестировано на учебнике:https://online.flipbuilder.com/chfvo/puhv/
