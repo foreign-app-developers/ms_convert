@@ -15,30 +15,46 @@ def fragment_to_json(image_path):
     with open(image_path, "rb") as image_file:
         base64_image = base64.b64encode(image_file.read()).decode("utf-8")
     text = """
-                    Ты – система, которая извлекает информацию из задания по английскому языку и преобразует её в строго структурированные данные в формате JSON. На вход подаётся изображение задания, содержащее текст с пропусками для заполнения. Твоя задача:
-    1. Извлечь инструкцию (если она есть).
-    2. Извлечь основной текст задания, при этом:
-       - Удалить все числовые метки вида (1), (2), (3) и т.д.
-       - Удалить любые подсказки или дополнительные пояснения, оставив только чистый текст.
-       - На месте пропусков вставить метки [BLANK_1], [BLANK_2] и т.д.
-    3. Сформировать массив объектов "blanks", где для каждого пропуска указаны:
-       - **id**: числовой идентификатор пропуска.
-       - **type**: тип пропуска (если пропуск, где есть выбор type = "multiple choise", если пропуск где есть подсказка, type = "clue", если просто пропуск и нет выбора и подсказок type = "empty").
-       - **param**: дополнительный параметр (например, глагол в начальной форме или варианты ответа, разделённые знаком "/").
+Ты – система для извлечения информации из задания по английскому языку и преобразования её в строго структурированные данные в формате JSON.
 
-    Обратите внимание, что любая дополнительная информация (подсказки, варианты ответа, исходные числовые пометки) должна присутствовать только в массиве "blanks" и **не должна** выводиться в основном тексте.
-    Если задания другого типа (не текст где нужно заполнить пропуски тогда верни только instruction и сплошной текст text, остальное оставь пустым)
+На вход подаётся изображение задания, содержащее текст с пропусками. Выполни следующие шаги:
 
-    Возвращай только корректный JSON без каких-либо дополнительных комментариев. Пример ожидаемого формата:
+1. **Извлеки инструкцию**, если она есть. Сохрани как строку в поле `"instruction"`.
 
-    {
-      "instruction": "fill gaps in text",
-      "text": "Tony Hunt, a journalist, is interviewing Leila Markham, an environmental scientist. TONY: So tell me, Leila, why is it important to save the rainforests? LEILA: There are so many reasons. One reason is that lots of the plants which [BLANK_1] in the rainforest could be useful in medicine. We [BLANK_2] all the plants, but there are tens of thousands of them. ...",
-      "blanks": [
-        {"id": 1, "type": "clue", "param": "grow"},
-        {"id": 2, "type": "clue", "param": "not/know"}
-      ]
-    }
+2. **Извлеки основной текст задания** и обработай его:
+   - Удали числовые метки вида (1), (2), (3) и т.д.
+   - Удали подсказки и пояснения — основной текст должен быть "чистым".
+   - На месте каждого пропуска вставь метку `[BLANK_N]`, где `N` — порядковый номер (начиная с 1).
+
+3. Создай массив объектов `"blanks"`, по одному на каждый пропуск. Для каждого:
+   - `id`: номер пропуска (целое число, начиная с 1).
+   - `type`: тип пропуска:
+     - `"multiple choice"` — если есть варианты ответа. Однако если слова нужно как-то ещё преобразовать то это НЕ multiple choice, а clue, а варианты ответа уйдут в param.
+     - `"clue"` — если есть подсказка.
+     - `"empty"` — если просто пропуск.
+     - в одном задании типы всех пропусков одинаковые.
+   - `param`: строка с данными:
+     - если `"multiple choice"` — перечисли варианты через `/` (например, `"is/are/was"`),
+     - если `"clue"` — укажи подсказку (например, начальная форма глагола),
+     - если `"empty"` — оставь пустую строку `""`.
+
+4. Если задание **не содержит пропусков для заполнения**, просто верни `"instruction"` и `"text"`, а `"blanks"` оставь пустым массивом.
+
+**Важно:** Вся дополнительная информация (подсказки, варианты, номера) должна быть только в массиве `"blanks"` и не присутствовать в основном тексте `"text"`.
+
+Возвращай только **валидный JSON** без комментариев и пояснений.
+
+**Пример ожидаемого результата:**
+
+```json
+{
+  "instruction": "Fill in the blanks with the correct form of the verbs.",
+  "text": "Tony Hunt, a journalist, is interviewing Leila Markham, an environmental scientist. TONY: So tell me, Leila, why is it important to save the rainforests? LEILA: There are so many reasons. One reason is that lots of the plants which [BLANK_1] in the rainforest could be useful in medicine. We [BLANK_2] all the plants, but there are tens of thousands of them.",
+  "blanks": [
+    { "id": 1, "type": "clue", "param": "grow" },
+    { "id": 2, "type": "clue", "param": "not/know" }
+  ]
+}
                     """
     # Данные для запроса
     data = {
@@ -62,13 +78,14 @@ def fragment_to_json(image_path):
 
     for attempt in range(2):
         try:
-            proxy_url = "http://45.186.6.104:3128"
+            proxy_url = "http://45.140.143.77:18080"
             os.environ['http_proxy'] = proxy_url
             os.environ['HTTP_PROXY'] = proxy_url
             os.environ['https_proxy'] = proxy_url
             os.environ['HTTPS_PROXY'] = proxy_url
             # Отправляем POST запрос
             response = requests.post(url, headers=headers, data=json.dumps(data))
+            print(response.text,flush=True)
             os.environ['http_proxy'] = ""
             os.environ['HTTP_PROXY'] = ""
             os.environ['https_proxy'] = ""
